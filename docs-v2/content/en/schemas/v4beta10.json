@@ -694,6 +694,14 @@
             "[\"-flag\", \"--otherflag\"]"
           ]
         },
+        "platforms": {
+          "items": {
+            "$ref": "#/definitions/BazelPlatformMapping"
+          },
+          "type": "array",
+          "description": "configure the --platforms flag for `bazel build` based on the configured skaffold target platform.",
+          "x-intellij-html-description": "configure the --platforms flag for <code>bazel build</code> based on the configured skaffold target platform."
+        },
         "target": {
           "type": "string",
           "description": "`bazel build` target to run.",
@@ -705,12 +713,39 @@
       },
       "preferredOrder": [
         "target",
-        "args"
+        "args",
+        "platforms"
       ],
       "additionalProperties": false,
       "type": "object",
       "description": "describes an artifact built with [Bazel](https://bazel.build/).",
       "x-intellij-html-description": "describes an artifact built with <a href=\"https://bazel.build/\">Bazel</a>."
+    },
+    "BazelPlatformMapping": {
+      "required": [
+        "platform",
+        "target"
+      ],
+      "properties": {
+        "platform": {
+          "type": "string",
+          "description": "skaffold platform.",
+          "x-intellij-html-description": "skaffold platform."
+        },
+        "target": {
+          "type": "string",
+          "description": "bazel platform target to be passed to bazel's `--platforms` flag.",
+          "x-intellij-html-description": "bazel platform target to be passed to bazel's <code>--platforms</code> flag."
+        }
+      },
+      "preferredOrder": [
+        "platform",
+        "target"
+      ],
+      "additionalProperties": false,
+      "type": "object",
+      "description": "relates a skaffold platform (like 'linux/amd64') to a workspace-specific bazel platform target (e.g. '//platforms:linux_amd64').",
+      "x-intellij-html-description": "relates a skaffold platform (like 'linux/amd64') to a workspace-specific bazel platform target (e.g. '//platforms:linux_amd64')."
     },
     "BuildConfig": {
       "type": "object",
@@ -1738,14 +1773,8 @@
         },
         "network": {
           "type": "string",
-          "description": "passed through to docker and overrides the network configuration of docker builder. If unset, use whatever is configured in the underlying docker daemon. Valid modes are `host`: use the host's networking stack. `bridge`: use the bridged network configuration. `container:<name|id>`: reuse another container's network stack. `none`: no networking in the container.",
-          "x-intellij-html-description": "passed through to docker and overrides the network configuration of docker builder. If unset, use whatever is configured in the underlying docker daemon. Valid modes are <code>host</code>: use the host's networking stack. <code>bridge</code>: use the bridged network configuration. <code>container:&lt;name|id&gt;</code>: reuse another container's network stack. <code>none</code>: no networking in the container.",
-          "enum": [
-            "host",
-            "bridge",
-            "container:<name|id>",
-            "none"
-          ]
+          "description": "passed through to docker and overrides the network configuration of docker builder. If unset, use whatever is configured in the underlying docker daemon. Examples: `host`: use the host's networking stack. `bridge`: use the bridged network configuration. `container:<name|id>`: reuse another container's network stack. `none`: no networking in the container. `my-custom-network`: user-defined network.",
+          "x-intellij-html-description": "passed through to docker and overrides the network configuration of docker builder. If unset, use whatever is configured in the underlying docker daemon. Examples: <code>host</code>: use the host's networking stack. <code>bridge</code>: use the bridged network configuration. <code>container:&lt;name|id&gt;</code>: reuse another container's network stack. <code>none</code>: no networking in the container. <code>my-custom-network</code>: user-defined network."
         },
         "noCache": {
           "type": "boolean",

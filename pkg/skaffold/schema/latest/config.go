@@ -19,13 +19,13 @@ package latest
 import (
 	"encoding/json"
 
+	"gopkg.in/yaml.v3"
 	v1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/kustomize/kyaml/yaml"
 
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/schema/util"
 )
 
-// This config version is not yet released, it is SAFE TO MODIFY the structs in this file.
+// !!! WARNING !!! This config version is already released, please DO NOT MODIFY the structs in this file.
 const Version string = "skaffold/v4beta12"
 
 // NewSkaffoldConfig creates a SkaffoldConfig
@@ -450,6 +450,9 @@ type GoogleCloudBuild struct {
 	// Defaults to `gcr.io/k8s-skaffold/skaffold`.
 	KoImage string `yaml:"koImage,omitempty"`
 
+	// Bucket specifies the Cloud Storage bucket to store the staged build sources.
+	Bucket string `yaml:"bucket,omitempty"`
+
 	// Concurrency is how many artifacts can be built concurrently. 0 means "no-limit".
 	// Defaults to `0`.
 	Concurrency int `yaml:"concurrency,omitempty"`
@@ -543,6 +546,9 @@ type ClusterDetails struct {
 
 	// Annotations describes the Kubernetes annotations for the pod.
 	Annotations map[string]string `yaml:"annotations,omitempty"`
+
+	// Labels describes the Kubernetes labels for the pod.
+	Labels map[string]string `yaml:"labels,omitempty"`
 
 	// RunAsUser defines the UID to request for running the container.
 	// If omitted, no SecurityContext will be specified for the pod and will therefore be inherited
@@ -724,16 +730,16 @@ type VerifyContainer struct {
 	// The container image's CMD is used if this is not provided.
 	Args []string `yaml:"args,omitempty"`
 	// Env is the list of environment variables to set in the container.
-	Env []VerifyEnvVar `json:"env,omitempty"`
+	Env []VerifyEnvVar `yaml:"env,omitempty"`
 }
 
 // VerifyEnvVar represents an environment variable present in a Container.
 type VerifyEnvVar struct {
 	// Name of the environment variable. Must be a C_IDENTIFIER.
-	Name string `json:"name" yamltags:"required"`
+	Name string `yaml:"name" yamltags:"required"`
 
-	// Value of the environment variable
-	Value string `json:"value"`
+	// Value of the environment variable.
+	Value string `yaml:"value"`
 }
 
 // RenderConfig contains all the configuration needed by the render steps.
@@ -963,6 +969,10 @@ type KubectlFlags struct {
 
 // LegacyHelmDeploy *beta* uses the `helm` CLI to apply the charts to the cluster.
 type LegacyHelmDeploy struct {
+	// Concurrency is how many packages can be installed concurrently. 0 means "no-limit".
+	// Defaults to `1`.
+	Concurrency *int `yaml:"concurrency,omitempty"`
+
 	// Releases is a list of Helm releases.
 	Releases []HelmRelease `yaml:"releases,omitempty"`
 
@@ -1063,6 +1073,9 @@ type HelmRelease struct {
 
 	// Packaged parameters for packaging helm chart (`helm package`).
 	Packaged *HelmPackaged `yaml:"packaged,omitempty"`
+
+	// DependsOn is a list of Helm release names that this deploy depends on.
+	DependsOn []string `yaml:"dependsOn,omitempty"`
 }
 
 // HelmPackaged parameters for packaging helm chart (`helm package`).
@@ -1458,6 +1471,9 @@ type KanikoArtifact struct {
 	// Defaults to the latest released version of `gcr.io/kaniko-project/executor`.
 	Image string `yaml:"image,omitempty"`
 
+	// ImagePullSecret is the name of the Kubernetes secret for pulling kaniko image and kaniko init image from a private registry.
+	ImagePullSecret string `yaml:"imagePullSecret,omitempty"`
+
 	// Destination is additional tags to push.
 	Destination []string `yaml:"destination,omitempty"`
 
@@ -1539,13 +1555,13 @@ type KanikoArtifact struct {
 	// Defaults to 5 minutes (`5m`).
 	CopyTimeout string `yaml:"copyTimeout,omitempty"`
 
-	// BuildContextCompressionLevel is the gzip compression level for the build context.
+	// BuildContextCompressionLevel is the gzip compression level(0-9) for the build context.
+	// 0: NoCompression.
+	// 1: BestSpeed.
+	// 9: BestCompression.
+	// -1: DefaultCompression.
+	// -2: HuffmanOnly.
 	// Defaults to `1`.
-	// 0: NoCompression
-	// 1: BestSpeed
-	// 9: BestCompression
-	// -1: DefaultCompression
-	// -2: HuffmanOnly
 	BuildContextCompressionLevel *int `yaml:"buildContextCompressionLevel,omitempty"`
 }
 

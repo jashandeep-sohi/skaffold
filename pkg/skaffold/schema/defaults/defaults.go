@@ -25,6 +25,7 @@ import (
 
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/build/kaniko"
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/constants"
+	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/deploy/helm"
 	kubectx "github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/kubernetes/context"
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/output/log"
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/schema/latest"
@@ -46,6 +47,10 @@ func Set(c *latest.SkaffoldConfig) error {
 	defaultToLocalBuild(c)
 	setDefaultTagger(c)
 	setDefaultLogsConfig(c)
+	err := setHelmDefaults(c)
+	if err != nil {
+		return err
+	}
 
 	for _, a := range c.Build.Artifacts {
 		setDefaultWorkspace(a)
@@ -110,6 +115,26 @@ func Set(c *latest.SkaffoldConfig) error {
 	}
 
 	setDefaultTestWorkspace(c)
+	return nil
+}
+
+func setHelmDefaults(c *latest.SkaffoldConfig) error {
+	if c.Deploy.LegacyHelmDeploy == nil {
+		return nil
+	}
+
+	if c.Deploy.LegacyHelmDeploy.Concurrency == nil {
+		defaultConcurrency := 1
+		c.Deploy.LegacyHelmDeploy.Concurrency = &defaultConcurrency
+	}
+
+	if len(c.Deploy.LegacyHelmDeploy.Releases) > 1 {
+		_, err := helm.NewDependencyGraph(c.Deploy.LegacyHelmDeploy.Releases)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

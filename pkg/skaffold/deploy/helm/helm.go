@@ -20,16 +20,19 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	sync2 "sync"
 	"time"
 
 	"github.com/blang/semver"
 	"github.com/cenkalti/backoff/v4"
+	"golang.org/x/sync/errgroup"
 	apimachinery "k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/access"
@@ -258,41 +261,103 @@ func (h *Deployer) Deploy(ctx context.Context, out io.Writer, builds []graph.Art
 
 	olog.Entry(ctx).Infof("Deploying with helm v%s ...", h.bV)
 
+	dependencyGraph, err := NewDependencyGraph(h.Releases)
+	if err != nil {
+		return fmt.Errorf("unable to create dependency graph: %w", err)
+	}
+
+	levelByLevelReleases, err := dependencyGraph.GetReleasesByLevel()
+	if err != nil {
+		return fmt.Errorf("unable to get releases by level: %w", err)
+	}
+
+	var mu sync2.Mutex
 	nsMap := map[string]struct{}{}
 	manifests := manifest.ManifestList{}
 
-	// Deploy every release
+	concurrency := 1
+	if h.Concurrency != nil {
+		if *h.Concurrency == 0 {
+			concurrency = -1 // unlimited
+		} else {
+			concurrency = *h.Concurrency
+		}
+	}
+
+	if concurrency == 1 {
+		olog.Entry(ctx).Infof("Installing %d releases sequentially", len(h.Releases))
+	} else {
+		olog.Entry(ctx).Infof("Installing %d releases concurrently", len(h.Releases))
+	}
+
+	releaseNameToRelease := make(map[string]latest.HelmRelease)
 	for _, r := range h.Releases {
-		releaseName, err := util.ExpandEnvTemplateOrFail(r.Name, nil)
-		if err != nil {
-			return helm.UserErr(fmt.Sprintf("cannot expand release name %q", r.Name), err)
-		}
-		chartVersion, err := util.ExpandEnvTemplateOrFail(r.Version, nil)
-		if err != nil {
-			return helm.UserErr(fmt.Sprintf("cannot expand chart version %q", r.Version), err)
+		releaseNameToRelease[r.Name] = r
+	}
+
+	levels := make([]int, 0, len(levelByLevelReleases))
+	for level := range levelByLevelReleases {
+		levels = append(levels, level)
+	}
+	// Sort levels in ascending order
+	sort.Ints(levels)
+
+	// Process each level in order
+	for _, level := range levels {
+		releases := levelByLevelReleases[level]
+		if len(levelByLevelReleases) > 1 {
+			olog.Entry(ctx).Infof("Installing level %d/%d releases (%d releases)", level+1, len(levelByLevelReleases), len(releases))
+		} else {
+			olog.Entry(ctx).Infof("Installing releases (%d releases)", len(releases))
 		}
 
-		repo, err := util.ExpandEnvTemplateOrFail(r.Repo, nil)
-		if err != nil {
-			return helm.UserErr(fmt.Sprintf("cannot expand repo %q", r.Repo), err)
-		}
-		r.ChartPath, err = util.ExpandEnvTemplateOrFail(r.ChartPath, nil)
-		if err != nil {
-			return helm.UserErr(fmt.Sprintf("cannot expand chart path %q", r.ChartPath), err)
+		g, levelCtx := errgroup.WithContext(ctx)
+		g.SetLimit(concurrency)
+		// Deploy releases in current level
+		for _, name := range releases {
+			release := releaseNameToRelease[name]
+
+			g.Go(func() error {
+				chartVersion, err := util.ExpandEnvTemplateOrFail(release.Version, nil)
+				if err != nil {
+					return helm.UserErr(fmt.Sprintf("cannot expand chart version %q", release.Version), err)
+				}
+
+				repo, err := util.ExpandEnvTemplateOrFail(release.Repo, nil)
+				if err != nil {
+					return helm.UserErr(fmt.Sprintf("cannot expand repo %q", release.Repo), err)
+				}
+
+				release.ChartPath, err = util.ExpandEnvTemplateOrFail(release.ChartPath, nil)
+				if err != nil {
+					return helm.UserErr(fmt.Sprintf("cannot expand chart path %q", release.ChartPath), err)
+				}
+
+				releaseName, err := util.ExpandEnvTemplateOrFail(release.Name, nil)
+				if err != nil {
+					return helm.UserErr(fmt.Sprintf("cannot expand release name %q", release.Name), err)
+				}
+
+				m, results, err := h.deployRelease(levelCtx, out, releaseName, release, builds, h.bV, chartVersion, repo)
+				if err != nil {
+					return helm.UserErr(fmt.Sprintf("deploying %q", releaseName), err)
+				}
+
+				mu.Lock()
+				defer mu.Unlock()
+				manifests.Append(m)
+				for _, res := range results {
+					if trimmed := strings.TrimSpace(res.Namespace); trimmed != "" {
+						nsMap[trimmed] = struct{}{}
+					}
+				}
+
+				return nil
+			})
 		}
 
-		m, results, err := h.deployRelease(ctx, out, releaseName, r, builds, h.bV, chartVersion, repo)
-		if err != nil {
-			return helm.UserErr(fmt.Sprintf("deploying %q", releaseName), err)
-		}
-
-		manifests.Append(m)
-
-		// collect namespaces
-		for _, r := range results {
-			if trimmed := strings.TrimSpace(r.Namespace); trimmed != "" {
-				nsMap[trimmed] = struct{}{}
-			}
+		if err := g.Wait(); err != nil {
+			return err
 		}
 	}
 
@@ -367,7 +432,11 @@ func (h *Deployer) Dependencies() ([]string, error) {
 			return true, nil
 		}
 
-		if err := walk.From(release.ChartPath).When(isDep).AppendPaths(&deps); err != nil {
+		expandedPath, e := util.ExpandEnvTemplateOrFail(release.ChartPath, nil)
+		if e != nil {
+			return deps, helm.UserErr("issue expanding variable", e)
+		}
+		if err := walk.From(expandedPath).When(isDep).AppendPaths(&deps); err != nil {
 			return deps, helm.UserErr("issue walking releases", err)
 		}
 	}
@@ -409,7 +478,7 @@ func (h *Deployer) Cleanup(ctx context.Context, out io.Writer, dryRun bool, _ ma
 	}
 
 	if len(errMsgs) != 0 {
-		return deployerr.CleanupErr(fmt.Errorf(strings.Join(errMsgs, "\n")))
+		return deployerr.CleanupErr(errors.New(strings.Join(errMsgs, "\n")))
 	}
 	return nil
 }
@@ -510,7 +579,9 @@ func (h *Deployer) deployRelease(ctx context.Context, out io.Writer, releaseName
 		}
 
 		defer func() {
-			os.Remove(constants.HelmOverridesFilename)
+			if err := os.Remove(constants.HelmOverridesFilename); err != nil {
+				olog.Entry(ctx).Debugf("unable to remove %q: %v", constants.HelmOverridesFilename, err)
+			}
 		}()
 	}
 

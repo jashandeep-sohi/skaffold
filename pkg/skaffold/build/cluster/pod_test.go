@@ -181,9 +181,10 @@ func TestKanikoArgs(t *testing.T) {
 
 func TestKanikoPodSpec(t *testing.T) {
 	artifact := &latest.KanikoArtifact{
-		Image:          "image",
-		DockerfilePath: "Dockerfile",
-		InitImage:      "init/image",
+		Image:           "image",
+		DockerfilePath:  "Dockerfile",
+		InitImage:       "init/image",
+		ImagePullSecret: "image-pull-secret",
 		Destination: []string{
 			"gcr.io/foo/bar:test-1",
 			"gcr.io/foo/bar:test-2",
@@ -220,6 +221,8 @@ func TestKanikoPodSpec(t *testing.T) {
 			HTTPProxy:           "http://proxy",
 			HTTPSProxy:          "https://proxy",
 			ServiceAccountName:  "aVerySpecialSA",
+			Annotations:         map[string]string{"test": "test"},
+			Labels:              map[string]string{"test-key": "test-value"},
 			RunAsUser:           &runAsUser,
 			Resources: &latest.ResourceRequirements{
 				Requests: &latest.ResourceRequirement{
@@ -268,7 +271,7 @@ func TestKanikoPodSpec(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations:  map[string]string{"test": "test"},
 			GenerateName: "kaniko-",
-			Labels:       map[string]string{"skaffold-kaniko": "skaffold-kaniko"},
+			Labels:       map[string]string{"skaffold-kaniko": "skaffold-kaniko", "test-key": "test-value"},
 			Namespace:    "ns",
 		},
 		Spec: v1.PodSpec{
@@ -351,6 +354,9 @@ func TestKanikoPodSpec(t *testing.T) {
 					},
 				},
 			}},
+			ImagePullSecrets: []v1.LocalObjectReference{{
+				Name: "image-pull-secret",
+			}},
 			ServiceAccountName: "aVerySpecialSA",
 			SecurityContext: &v1.PodSecurityContext{
 				RunAsUser: &runAsUser,
@@ -405,6 +411,7 @@ func TestKanikoPodSpec(t *testing.T) {
 
 	testutil.CheckDeepEqual(t, expectedPod.Spec.Containers[0].Env, pod.Spec.Containers[0].Env)
 	testutil.CheckDeepEqual(t, expectedPod.Spec.Containers[0].Args, pod.Spec.Containers[0].Args)
+	testutil.CheckDeepEqual(t, expectedPod.ObjectMeta, pod.ObjectMeta)
 }
 
 func TestResourceRequirements(t *testing.T) {

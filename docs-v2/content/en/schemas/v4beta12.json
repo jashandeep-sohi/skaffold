@@ -1228,6 +1228,15 @@
           "description": "describes how to mount the local Docker configuration into a pod.",
           "x-intellij-html-description": "describes how to mount the local Docker configuration into a pod."
         },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "description": "describes the Kubernetes labels for the pod.",
+          "x-intellij-html-description": "describes the Kubernetes labels for the pod.",
+          "default": "{}"
+        },
         "namespace": {
           "type": "string",
           "description": "Kubernetes namespace. Defaults to current namespace in Kubernetes configuration.",
@@ -1318,6 +1327,7 @@
         "tolerations",
         "nodeSelector",
         "annotations",
+        "labels",
         "runAsUser",
         "resources",
         "concurrency",
@@ -2041,6 +2051,11 @@
     },
     "GoogleCloudBuild": {
       "properties": {
+        "bucket": {
+          "type": "string",
+          "description": "specifies the Cloud Storage bucket to store the staged build sources.",
+          "x-intellij-html-description": "specifies the Cloud Storage bucket to store the staged build sources."
+        },
         "concurrency": {
           "type": "integer",
           "description": "how many artifacts can be built concurrently. 0 means \"no-limit\".",
@@ -2157,6 +2172,7 @@
         "gradleImage",
         "packImage",
         "koImage",
+        "bucket",
         "concurrency",
         "workerPool",
         "region",
@@ -2359,6 +2375,15 @@
           "description": "if `true`, Skaffold will send `--create-namespace` flag to Helm CLI. `--create-namespace` flag is available in Helm since version 3.2. Defaults is `false`.",
           "x-intellij-html-description": "if <code>true</code>, Skaffold will send <code>--create-namespace</code> flag to Helm CLI. <code>--create-namespace</code> flag is available in Helm since version 3.2. Defaults is <code>false</code>."
         },
+        "dependsOn": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "a list of Helm release names that this deploy depends on.",
+          "x-intellij-html-description": "a list of Helm release names that this deploy depends on.",
+          "default": "[]"
+        },
         "name": {
           "type": "string",
           "description": "name of the Helm release. It accepts environment variables via the go template syntax.",
@@ -2474,7 +2499,8 @@
         "repo",
         "upgradeOnChange",
         "overrides",
-        "packaged"
+        "packaged",
+        "dependsOn"
       ],
       "additionalProperties": false,
       "type": "object",
@@ -2646,8 +2672,8 @@
         },
         "buildContextCompressionLevel": {
           "type": "integer",
-          "description": "gzip compression level for the build context.",
-          "x-intellij-html-description": "gzip compression level for the build context.",
+          "description": "gzip compression level(0-9) for the build context. 0: NoCompression. 1: BestSpeed. 9: BestCompression. -1: DefaultCompression. -2: HuffmanOnly.",
+          "x-intellij-html-description": "gzip compression level(0-9) for the build context. 0: NoCompression. 1: BestSpeed. 9: BestCompression. -1: DefaultCompression. -2: HuffmanOnly.",
           "default": "1"
         },
         "cache": {
@@ -2736,6 +2762,11 @@
           "type": "string",
           "description": "specify a file to save the image name with digest of the built image to.",
           "x-intellij-html-description": "specify a file to save the image name with digest of the built image to."
+        },
+        "imagePullSecret": {
+          "type": "string",
+          "description": "name of the Kubernetes secret for pulling kaniko image and kaniko init image from a private registry.",
+          "x-intellij-html-description": "name of the Kubernetes secret for pulling kaniko image and kaniko init image from a private registry."
         },
         "initImage": {
           "type": "string",
@@ -2903,6 +2934,7 @@
         "target",
         "initImage",
         "image",
+        "imagePullSecret",
         "destination",
         "digestFile",
         "imageFSExtractRetry",
@@ -3296,6 +3328,12 @@
     },
     "LegacyHelmDeploy": {
       "properties": {
+        "concurrency": {
+          "type": "integer",
+          "description": "how many packages can be installed concurrently. 0 means \"no-limit\".",
+          "x-intellij-html-description": "how many packages can be installed concurrently. 0 means &quot;no-limit&quot;.",
+          "default": "1"
+        },
         "flags": {
           "$ref": "#/definitions/HelmDeployFlags",
           "description": "additional option flags that are passed on the command line to `helm`.",
@@ -3316,6 +3354,7 @@
         }
       },
       "preferredOrder": [
+        "concurrency",
         "releases",
         "flags",
         "hooks"
@@ -4639,6 +4678,14 @@
           "x-intellij-html-description": "entrypoint array. Not executed within a shell. The container image's ENTRYPOINT is used if this is not provided.",
           "default": "[]"
         },
+        "env": {
+          "items": {
+            "$ref": "#/definitions/VerifyEnvVar"
+          },
+          "type": "array",
+          "description": "list of environment variables to set in the container.",
+          "x-intellij-html-description": "list of environment variables to set in the container."
+        },
         "image": {
           "type": "string",
           "description": "container image name.",
@@ -4654,7 +4701,8 @@
         "name",
         "image",
         "command",
-        "args"
+        "args",
+        "env"
       ],
       "additionalProperties": false,
       "type": "object",
@@ -4662,6 +4710,26 @@
       "x-intellij-html-description": "a list of tests to run on images that Skaffold builds."
     },
     "VerifyEnvVar": {
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "of the environment variable. Must be a C_IDENTIFIER.",
+          "x-intellij-html-description": "of the environment variable. Must be a C_IDENTIFIER."
+        },
+        "value": {
+          "type": "string",
+          "description": "of the environment variable.",
+          "x-intellij-html-description": "of the environment variable."
+        }
+      },
+      "preferredOrder": [
+        "name",
+        "value"
+      ],
+      "additionalProperties": false,
       "type": "object",
       "description": "represents an environment variable present in a Container.",
       "x-intellij-html-description": "represents an environment variable present in a Container."
